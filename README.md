@@ -1,42 +1,48 @@
 # The Myth of Platypus
 
-A minimalist, responsive blog powered by Eleventy.
+A minimalist blog powered by Eleventy. Write in Markdown, commit, and it's live.
 
-## Writing workflow
-
-1. Create a new Markdown file in `src/posts`.
-2. Add front matter:
-
-```md
----
-layout: layouts/post.njk
-title: Your Post Title
-description: Optional summary
-date: 2026-02-26
-permalink: /posts/your-post-slug/
----
-
-Your content here.
-```
-
-3. Commit and push to `main`.
-4. GitHub Actions builds and deploys automatically to GitHub Pages.
-
-## Local development
+## Running locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Build for production
+Open `http://localhost:8080` — it rebuilds whenever you save a file.
 
-```bash
-npm run build
+---
+
+## Writing a post
+
+Create a new `.md` file in `src/posts/` with this at the top:
+
+```yaml
+---
+layout: layouts/post.njk
+title: Your Post Title
+description: One sentence summary
+date: 2026-02-27
+author: Your Name
+tags: [posts, code] 
+image: /assets/img/cover.jpg
+permalink: /posts/your-slug/
+---
+Your content here in Markdown.
 ```
 
-## GitHub Pages setup (one-time)
+**What matters:**
 
-- In your repository settings, open **Pages**.
-- Set **Source** to **GitHub Actions**.
-- The workflow in `.github/workflows/deploy.yml` handles future deployments automatically.
+- `title`, `date`, and `permalink` are required
+- `tags` should always include `posts` first, then add a category like `code`, `design`, `writing`, or `meta` - that's what shows up as the badge
+- `author` is optional but useful if multiple people are writing
+- `image` is the big cover at the top — put images in `src/assets/img/` and reference them as `/assets/img/filename.jpg`
+- Inline images: `![alt text](/assets/img/photo.jpg)`
+
+Math equations work with `$inline$` or `$$block$$` using KaTeX.
+
+---
+
+## Deploying
+
+Push to GitHub. Every commit to `main` deploys automatically.
