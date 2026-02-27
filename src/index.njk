@@ -1,0 +1,29 @@
+---
+layout: layouts/base.njk
+title: The Myth of Platypus
+description: Notes, essays, and thoughts.
+---
+<section class="hero">
+  <h1>Notes from the edge of curiosity.</h1>
+</section>
+
+<section class="posts-list" aria-label="Blog posts">
+  {% for post in collections.posts %}
+    <a class="post-item" href="{{ post.url | url }}">
+      <div class="post-item-left">
+        {% if post.data.tags %}
+          {% for tag in post.data.tags %}
+            {% if tag != "posts" %}
+              <div class="post-item-tag">{{ tag }}</div>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+        <h2>{{ post.data.title }}</h2>
+        {% if post.data.description %}
+          <p class="post-item-desc">{{ post.data.description }}</p>
+        {% endif %}
+      </div>
+      <span class="post-item-date">{{ post.date | readableDate }}</span>
+    </a>
+  {% endfor %}
+</section>
