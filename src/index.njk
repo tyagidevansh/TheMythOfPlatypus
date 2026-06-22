@@ -11,13 +11,16 @@ description: Notes, essays, and thoughts.
   {% for post in collections.posts %}
     <a class="post-item" href="{{ post.url | url }}">
       <div class="post-item-left">
-        {% if post.data.tags %}
-          {% for tag in post.data.tags %}
-            {% if tag != "posts" %}
-              <div class="post-item-tag">{{ tag }}</div>
-            {% endif %}
-          {% endfor %}
-        {% endif %}
+        <div class="post-top">
+          {% if post.data.tags %}
+            {% for tag in post.data.tags %}
+              {% if tag != "posts" %}
+                <div class="post-item-tag">{{ tag }}</div>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+          <span class="post-item-date-mobile"> {{ post.date | compressedDate }} </span>
+        </div>
         <h2>{{ post.data.title }}</h2>
         {% if post.data.description %}
           <p class="post-item-desc">{{ post.data.description }}</p>
