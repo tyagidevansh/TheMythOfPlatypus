@@ -9,6 +9,20 @@ module.exports = function (eleventyConfig) {
     }).format(dateObj);
   });
 
+  eleventyConfig.addFilter("compressedDate", (date) => {
+    const d = new Date(date);
+    const currentYear = new Date().getFullYear();
+
+    if (d.getFullYear() === currentYear) {
+      return d.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
+    }
+
+    return d.getFullYear().toString();
+  });
+
   eleventyConfig.addFilter("readingTime", function (content) {
     const text = content.replace(/<[^>]*>/g, "");
     const words = text.trim().split(/\s+/).length;
