@@ -31,4 +31,16 @@ layout: layouts/base.njk
   </header>
 
   <div class="post-content">{{ content | safe }}</div>
+
+  {% if next %}
+  <nav class="post-navigation">
+    <a href="{{ next.url }}" class="next-post">
+      <strong>
+        {{ next.title }}
+        <span aria-hidden="true">→</span>
+      </strong>
+    </a>
+  </nav>
+  {% endif %}
+
 </article>
