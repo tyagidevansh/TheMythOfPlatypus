@@ -8,6 +8,9 @@ tags: [posts, fiction]
 image: /assets/conquer1/header.png
 imageAlt: Conquer Logo
 permalink: /posts/conquer-2/
+prev:
+  title: Conquer⠀#1
+  url: /posts/conquer-1/
 ---
 
 The silence carried on to the next day.
@@ -132,7 +135,7 @@ Corin stepped onto the pier, the old timber creaked beneath his feet. The harbou
 
 Garrick remained facing the sea but must have heard Corin approaching. The old fisherman had ears that defied all expectation, he seemed to hear everything that happened upon the water. More than once he had identified a returning boat simply by the rhythm of its oars striking the waves long before anyone else could make out its sails. Yet he made no sign that he had noticed the boy.
 
-Corin came to a stop beside him and rested his elbows upon the weathered railing.  The bay was calm. Gentle ripples rolled beneath the pier, rocking the boats so lightly that several of them scarcely seemed to move at all.
+Corin came to a stop beside him and rested his elbows upon the weathered railing. The bay was calm. Gentle ripples rolled beneath the pier, rocking the boats so lightly that several of them scarcely seemed to move at all.
 
 "Mother knew I'd find you here."
 

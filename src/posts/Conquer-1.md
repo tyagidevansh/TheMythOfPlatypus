@@ -8,6 +8,9 @@ tags: [posts, fiction]
 image: /assets/conquer1/header.png
 imageAlt: Conquer Logo
 permalink: /posts/conquer-1/
+next:
+  title: Conquer⠀#2
+  url: /posts/conquer-2/
 ---
 
 The winds surrounding Kubrea were calm that day. The Dark Sea wasn't spitting its wrath over the shores of the small island. The sun was out and the skies were blue.
