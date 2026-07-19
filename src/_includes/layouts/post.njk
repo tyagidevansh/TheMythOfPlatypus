@@ -32,15 +32,25 @@ layout: layouts/base.njk
 
   <div class="post-content">{{ content | safe }}</div>
 
-  {% if next %}
-  <nav class="post-navigation">
+  {% if prev or next %}
+  <nav class="post-navigation" aria-label="Post navigation">
+    {% if prev %}
+    <a href="{{ prev.url }}" class="prev-post">
+      <strong>
+        <span aria-hidden="true">←</span>
+        {{ prev.title }}
+      </strong>
+    </a>
+    {% endif %}
+
+    {% if next %}
     <a href="{{ next.url }}" class="next-post">
       <strong>
         {{ next.title }}
         <span aria-hidden="true">→</span>
       </strong>
     </a>
+    {% endif %}
   </nav>
   {% endif %}
-
 </article>
