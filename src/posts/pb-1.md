@@ -1,7 +1,7 @@
 ---
 layout: layouts/post.njk
-title: How I made my language faster than Python
-description: A brief breakdown of all the techniques I've employed so far to make Pogberry ~blazingly fast~
+title: How I made my language as fast as Python
+description: A brief breakdown of all the techniques I've employed so far to make Pogberry ~moderately fast~
 date: 2026-09-06
 author: Devansh
 tags: [posts, code]
@@ -19,7 +19,6 @@ I am not making this statement simply because the bytecode interpreter was compl
 Pogberry is a dynamically typed, garbage-collected, stack-based bytecode virtual machine written in C. Over time, it evolved into a fully fledged language environment with first-class hash maps, dynamic list arrays, lexical closures, a modular standard library, and even a native C backend for graphical applications. At a high level, Pogberry is split into four pieces: the **scanner**, the **compiler**, the **runtime object system**, and the **virtual machine**. The compiler takes the source code and asks the scanner to convert it into tokens, parses those tokens and emits bytecode into chunks, with each function owning its own chunk of bytecode and associated constants. The runtime contains the objects that make up the language — strings, functions, closures, classes, instances, lists, hash maps, and so on — along with the garbage collector that manages their memory. Finally, the VM executes the compiler's bytecode using a stack-based execution model, maintaining call frames for functions and manipulating values on the VM stack. Around these core components sits the standard library and the native-function interface, which allow Pogberry code to interact with functionality implemented in C.
 
 The bit that's the most important for this article is the VM. When executing a piece of code, PB does not execute native x86-64 machine code directly. Instead, it executes an artificial instruction set, much like an actual CPU's ISA. The responsibility for actually getting compiled down to assembly and the native ISA rests with GCC. Some important keywords to remember are:
-
 1. **The Code Stream (Chunk):** An array of bytes containing opcodes (e.g., `OP_ADD`, `OP_GET_LOCAL`, `OP_JUMP`) and their operand payloads (such as variable indices or jump offsets).
 2. **The Instruction Pointer (`ip`):** A raw pointer into that bytecode array tracking which instruction is currently executing.
 3. **The Value Stack (`stack`):** A contiguous buffer of values (numbers, booleans, object references). Values are pushed, operated on, and popped.
@@ -54,13 +53,11 @@ for (;;) {
 This looks efficient enough. But at the silicon level, this loop is an absolute minefield for modern CPUs. Modern processors are REALLY fast at executing linear code with predictable memory access. If we wish to make our code fast, there are three main goals we should keep in mind - reduce the number of assembly instructions produced for any task, use less memory so we hit the cache as often as possible and try to make it so that the CPU does not have to guess too much about what code will execute next. Unsurprisingly all of these come with massive asterisks, but they hold true at a high level. This may be a good time to hand you something precious - a grain of salt. Remember this blog was written by a graduate of the prestigious Bharati Vidyapeeth's College of Engineering.
 
 Anyway, modern CPUs make many techniques that break the traditional fetch-execute cycle most of us have in our minds. They rely on:
-
 - **Out of order execution**: CPUs don't always execute code in the same order the assembly specifies, dozens of instructions (which don't rely on each other) are executed simultaneously, memory fetches are predicted hundreds of clock cycles and advance. Instructions in consecutive chunks of assembly code may get executed through completely separate pathways inside the CPU.
 - **Branch prediction**: CPUs notice loops and keep track of which way an if-condition ends up evaluating most of the time. Based on this, on later iterations of a loop it bets which way the next iteration of the loop will jump and pre-loads the data required to execute that branch. If it guesses wrong, it has to clear everything it had gathered and go fetch the correct branch instead. This bet is usually worth it, as CPUs are fast but memory is slow. It is our job as language optimizers (?) to stack the gambling odds in the CPU's favour, for our own sake.
 - **L1/L2 cache** - If possible, a CPU would MUCH RATHER always read from its registers or L1/L2 caches. Accessing data from registers is instantaneous, L1 or L2 caches take 4 to 12 clock cycles to access the data, whereas the main memory - even fast DDR5 - takes 300 to 350 clock cycles. And it only gets slower from there. This does not really apply to us, but simply to drive the point home at how much we must value cache locality, I'd like to state how many clock cycles it takes other forms of storage to get data to the CPU. If we were unlucky enough to hit a page fault on our super fast DDR5 memory and had to fetch that page from our equally state of the art PCIe Gen 5 NVMe SSD, it'd take us over 100,000 clock cycles! We'd have to wait around 500,000 cycles for the data to arrive from a SATA SSD and it can easily take 75 million clock cycles to fetch data from a mechanical hard drive. Let's just try to get as much data as we can from our precious L1 and L2 caches.
 
 Our naive, educational implementation of a bytecode interpreter violates almost every single one of these preferences:
-
 - **Slow dispatch**: Every single bytecode instruction must read a byte(see code blurb above for clarity, it's really what happens inside the VM), jump through a C switch table (an indirect JMP *rax) and repeat. The branch predictor struggles because every opcode jumps from a fixed start place to an essentially random place. Predicting hundreds of different destination targets isn't exactly feasible for our hardcoded (literally) branch predictor.
 - **Memory Traffic Overload**: Pushing or popping values from the VM's stack calls C functions like push() or pop() that we had implemented. Every time a push or pop needs to happen, which is naturally quite often, the CPU must write the memory address of vm.stackTop, decrement of increment it, and spill registers onto the stack.
 - **Cache Line Thrashing**: If bytecode encoding is too wide, or if we use too many of them for simple instructions, or if the data structures jump through pointers too much, CPU cache lines get saturated with useless data, and the data we actually need gets evicted.
@@ -228,7 +225,6 @@ We're not done with this section yet. Beauty is only skin deep remember, and our
 Much better. Now `PUSH(val)` compiles down a single store instruction into the memory address held in the register for `stackTop` without the need for our code to jump to a whole another address to execute a simple function and then jump back in. Do not forget about the cache.
 
 We've made incredible advances already, but we've introduced a potential problem as well. If `ip` and `stackTop` only live in CPU registers inside `run()`, the memory copies in `vm.stackTop` and `frame->ip` become stale. This creates three main issues:
-
 1. The garbage collector is supposed to sweep all live roots, but if vm.stackTop memory is stale, newly pushed objects on the stack won't be marked and they'll be freed as garbage.
 2. When `runtimeError()` fires, it inspects the instruction pointer to report the file line number. If `frame->ip` is stale, the error reporter points to the wrong instructions.
 3. Native C functions like `join()` which we use in our stdlib of sorts access `vm.stackTop` directly.
@@ -253,7 +249,169 @@ Consider standard control flow, a literal `if` statement. As simple as programmi
 ```
 
 Notice that the VM executed an extra `OP_POP` opcode every single time a branch was taken. Executing 3 opcodes (`JUMP if false`, `JUMP if true`, `POP`) when the logic can be expressed in 1 opcode wastes precious CPU cycles. Admittedly this is benchmaxxing on my part. My benchmarks are repetitive after all, and they execute if-statements millions of times. But denser opcodes are an industry standard and are used often to make languages, or even CPUs faster. I am defending myself against an audience that isn't present, but if ISAs get to have newer instructions that just do multiple things, I get to have that too and call it a win. If statements are fundamental enough to any programming languages to warrant special treatment. Three new opcodes now exist:
-
 - **OP_JUMP_IF_FALSE**: Pops the condition frm the stack and immediately jumps if falsey.
 - **OP_JUMP_IF_TRUE_OR_POP**: If the top of the stack is truthy, it keeps the value on the stack and jumps over the rest of the expression. If it is falsey, it drops the value so the next operand can be evaluated. It makes `or` conditions inside if-conditionals faster.
 - **OP_JUMP_IF_FALSE_OR_POP**: The opposite of above. Used for `and` conditions inside if-statements. Shortcircuits on falsey values.
+
+## More Inlining
+
+We've already inlined push and pop operations. That was a massive win because unsurprisingly, those functions are called a lot during the execution of a program. Another thing we can hope to inline are comparisons. It's not that comparisons form a large chunk of a language's runtime computational load, but each equality check can be deceptively expensive. In dynamic languages such as PB, variables can contain any data types or first class values and hence equality checking can be arbitrarily complex, at any point we may be comparing lists, string contents or inspecting instances.
+
+Originally, PB used a general purpose C function:
+
+```c
+case OP_EQUAL: {
+  Value b = POP();
+  Value a = POP();
+  STORE_FRAME();
+  bool equal = valuesEqual(a, b);
+  PUSH(BOOL_VAL(equal));
+  break;
+}
+```
+
+As you can probably figure, every `==` check paid for a C function for `valuesEqual()` and had to call `STORE_FRAME()` to sync VM registers before the call (we talked about this a couple of points ago). In reality, the vast majority of equality comparisons compare one of the following:
+- Two numbers
+- Two booleans
+- Two identical object points (also known as strings in normal person talk, which is really fast when strings are interned)
+- A value against nil
+
+Hence, I inlined a fast path directly into the `OP_EQUAL` case. Again, I don't think it is wise to paste the entire code here, so I'd suggest giving `vm.c` a read. But in summary, we have a few simple if-statements that look like so:
+
+```c
+if (a.type == b.type) {
+    if (a.type == VAL_NUMBER) {
+      equal = (a.as.number == b.as.number);
+    // later overwrite the top value of the stack with the boolean value of equal
+    }
+    // handle the other simple cases, fallback to the original slow path otherwise
+}
+```
+
+## Inline Caching for Global Lookups
+
+Okay so the last two optimizations have been boring. I know you must be losing your motivation to read on further, but we're on the fun part now. This optimization, alongside the one we did for push and pop operations, made the greatest difference in performance.
+
+In Pogberry, global variables and top-level functions live in a hash table called `vm.globals`. Whenever a function is called, an opcode of the following form is pushed onto the VM's stack:
+
+`OP_GET_GLOBAL "function_name"`
+
+Originally, each OP_GET_GLOBAL did the following:
+
+1. Read the constant name from the constant pool ("fib" for example)
+2. Compute the hash or grab the precomputed hash of "fib" (if precomputed, the hash would be stored in the ObjString struct, which each string is an instance of)
+3. Probe the `vm.globals` hash table entries
+4. Extract the `Value`
+
+When recursively calculating the 32nd fibonacci number, the `fib` function is invoked over 7 million times. That means the VM did the whole song and dance to perform hash table lookups 7 million times just to find the exact same function pointer every single time. We can cache this.
+
+The key insight to keep in mind is that if a variable at bytecode offset X resolved to memory address Y on the previous iteration, it will almost certainly resolve to the same address Y on this iteration as well. If we cache a direct pointer to the hash table entry, future executions can bypass the hash table entirely. However, this cache must still be temporary. What if someone defines a new global, deletes a global or shadows `fib`? If the hash table resizes, all pointers into it become invalid. The solution for this is version-stamped inline caching.
+
+To keep it short, we add a version counter to the hash table. Whenever a variable is added or removed, we bump up the table's version by one. Then we attach an inline cache to each chunk. This cache takes the form of a new struct:
+
+```c
+// src/headers/chunk.h
+typedef struct {
+  Value *valuePtr;  // Direct pointer to the value inside the Table Entry
+  uint32_t version; // Version of the Table when this pointer was cached
+} GlobalCache;
+```
+
+This will make our `OP_GET_GLOBAL` blazingly fast. Inside it's switch case, we can add the following code:
+
+```c
+uint8_t slot = READ_BYTE();
+  GlobalCache *cache = &frame->closure->function->chunk.globalCache[slot];
+  Table *globals = globalsForFrame(frame);
+
+  // Cache Hit!
+  if (cache->version == globals->version && cache->valuePtr != NULL) {
+    PUSH(*cache->valuePtr);
+    break;
+  }
+```
+
+If our global cache version is the same as our function's cache version, it means that no new variables have been allocated or deallocated. We can safely dereference the pointer directly and avoid a trip to the dreaded Table. If the cache hit fails, no worries, the old slow path follows. We must not forget to populate the cache though, otherwise our work would mean nothing:
+
+```c
+cache->valuePtr = &entry->value;
+cache->version = globals->version;
+```
+
+Now, when we run our recursive fibonacci program, the first call to `fib` takes the slow path and records the pointer in the cache's valuePtr. Over the next 7 MILLION calls, we get a cache hit every single time and the program executes so fast you barely believe it. I mean it. Here's a screenshot to prove the speed difference we have achieved so far in our little fibonacci program:
+
+![First fib comparison](/assets/pb-1/fib-1.png)
+
+Our program takes only about 15% of the time it used to take (the number appearing in scientific notation in the old, slow build was a separate bug not worth talking about here). In fact, we have now achieved parity with Python. We take the same time to calculate fibonacci numbers as the language with 30 years of optimizations. Big hurray.
+
+![Second fib comparison](/assets/pb-1/fib-2.png)
+
+## Streamlining OP_RETURN and OP_CALL
+
+I'd just stated that the fibonacci program was now as fast as python. That should have marked the end of that article right? After all Pogberry is now as fast as Python. Alas, I must keep you here a little longer, we haven't beaten Python across all the benchmarks on average, we still have two final little things to care of, and then we will be done.
+
+First, lets talk about callable objects. Functions, native functions, classes and their bound methods - these are all the objects you can call in Pogberry. Unsurprisingly however, the vast majority of all the calls in a real program are to ObjClosure - functions, essentially. I would encourage making the project with `make opcodes` and running a few programs with the `--opcodes` flag. This would show you a count of all the opcodes that get called during the execution of that program. Of course, using the debug view which logs every single action taken by the VM, or using good ol' `perf` are also fine options. In this article I have mostly skipped over the reasoning behind choosing what I've so far chosen to optimize for the sake of brevity.
+
+Previously, every `OP_CALL` exited the interpreter switch statement to call generic C helper functions. You guessed it, its the same villain yet again. Creating unnecessary C call frames. 2 per every function call to be precise. That's over 14 million for our 32nd fibonacci number. We can use our heuristic to save us again. If most `OP_CALL` are for closures, well let's just add a dedicated fast path for it:
+
+```c
+// FAST PATH: Is it a Pogberry script function?
+  if (IS_OBJ(callee) && OBJ_TYPE(callee) == OBJ_CLOSURE) {
+    ObjClosure *closure = AS_CLOSURE(callee);
+    ObjFunction *function = closure->function;
+
+    if (argCount != function->arity) {
+      STORE_FRAME();
+      runtimeError("Expected %d arguments but got %d.", function->arity, argCount);
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    if (vm.frameCount == FRAMES_MAX) {
+      STORE_FRAME();
+      runtimeError("Stack overflow.");
+      return INTERPRET_RUNTIME_ERROR;
+    }
+
+    // 1. Save caller's IP
+    frame->ip = ip;
+
+    // 2. Advance CallFrame
+    frame = &vm.frames[vm.frameCount++];
+
+    // 3. Set up new frame environment
+    frame->closure = closure;
+    frame->ip = function->chunk.code;
+    frame->slots = stackTop - argCount - 1;
+
+    // 4. Update local hardware registers
+    ip = frame->ip;
+    slots = frame->slots;
+```
+
+If it isn't a closure, we fall back to our trusted slow fella instead:
+
+```c
+STORE_FRAME();
+if (!callValue(callee, argCount)) return INTERPRET_RUNTIME_ERROR;
+LOAD_FRAME();
+break;
+```
+
+Our CPU loves us for saving it from creating and tearing down millions of frames.
+
+And now for the final optimization for today, we must recall what sets closures apart - capturing upvalues. Every function could capture upvalues, but most don't. I don't have a data point backing this up, it's a lemma I made up. Trust me, bro. The old `OP_RETURN` handler called a function called `closeUpvalue()` for every single function, even though most don't have any. The solution is stupidly simple. We just won't call the function if there are no upvalues to capture. Duh.
+
+```c
+if (vm.openUpvalues != NULL) {
+  closeUpvalues(frame->slots);
+}
+```
+
+The extra conditional and variable lookup would not be worth it if a sizeable chunk of closures contained upvalues, but for us it is well worth it. With this, I think it is time to run the benchmark suite again and see what pops out.
+
+![Benchmark at the end](/assets/pb-1/benchmark-final.png)
+
+Stop the count! We're still slower than Python in several areas, but I think it's fair to call Pogberry as fast as Python now. We're so much more efficient with our memory usage it's not even worth mentioning it. It's time to bring this article to a close.
+
+---
+
+Congratulations, you're among the top 1% of humans when it comes to attention span if you managed to read everything up till here. I'm thoroughly impressed. I have a reward for you - the journey isn't over! There's a lot more to do and you can look forward to another article coming soon (or maybe its already out). Pogberry can't just be as fast as Python, it's gotta be faster. I WILL make it blazingly fast. See you there!
