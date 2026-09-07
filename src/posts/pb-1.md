@@ -7,7 +7,7 @@ author: Devansh
 tags: [posts, code]
 image: /assets/pb-1/header.png
 imageAlt:
-permalink: /posts/on-intent/
+permalink: /posts/pb-devlog-1/
 ---
 
 Pogberry (affectionately PB, I happened to find peanut butter extraordinarily delicious when I started working on this project) used to be a very slow language until recently. It started off as an extract reconstruction of Robert Nystrom's CLOX, implemented exactly as taught in his phenomenal book "Crafting Interpreters". I'm not faulting Mr. Crafting Interpreters one bit for CLOX (and by extension, PB) being excruciatingly slow, the primary goal of that book was to teach the classic foundations, and it does that extremely well. CLOX was never supposed to be a toy language, but it was first and foremost an educational tool. It _can_ do everything a programming language is supposed to do - it's Turing complete after all - but it was not meant for serious programming.
@@ -133,6 +133,8 @@ struct ObjString {
 
 The result of this change, alongside fixing the benchmark to not be as lopsided anymore, was that string operations were now only about 50% slower in Pogberry compared to Python. Running just the original concat-only benchmark also resulted in about the same performance difference. Not quite a win yet, but it is important to note that Python also used far more memory. This will be a common theme throughout. While clowning on Python is a beloved hobby of mine, i do realise that it is a mature and well-made language, maintained by incredibly talented people. It uses more memory because it just has a lot more to keep track of. Pogberry is a far less capable language afterall. All the benchmarks use standard CPython as well. PyPy would absolutely wipe the floor with Pogberry in these benchmarks made of repetitive tasks. But hey, maybe Pogberry will have a JIT soon too, and then PyPy too will be taken down.
 
+![Benchmark after selective string interning](/assets/pb-1/benchmark-2.png)
+
 ## Inlined Stack Operations
 
 Originally, manipulating the evaluation stack looked like beautiful C code:
@@ -191,14 +193,9 @@ typedef struct {
 extern VM vm;
 ```
 
-```
-
-```
-
 Inside `run()`, every instruction interacted with this state through struct dereferences and pretty C functions like the ones I mentioned a little while ago. For an example of a struct dereference, see the VM switch-case for pushing a local variable onto the stack:
 
 ```c
-
 case OP_GET_LOCAL: {
   uint8_t slot = READ_BYTE();
   push(frame->slots[slot]); // Struct dereference + function call
@@ -209,7 +206,6 @@ case OP_GET_LOCAL: {
 We can inject speed (not the literal drug) into our VM through two relatively small changes. First, we hoist important pointers into local CPU registers. Instead of chasing pointers through the VM struct and individual call frames, we copy the active execution pointers into local variables at the top of `run()`:
 
 ```c
-
 CallFrame *frame = &vm.frames[vm.frameCount - 1];
 register uint8_t *ip = frame->ip;
 Value *stackTop = vm.stackTop;
@@ -218,7 +214,7 @@ Value *slots = frame->slots;
 
 Because `ip`, `stackTop` and `slots` are local to `run()`, the compiler safely allocates them directly into hardware general-purpose CPU registers and keeps them their as their addresses are never taken. This means that there are zero memory roundtrips to the vm struct during the inner run loop. This run loop is under our tight control as language authors. We can optimize this to the limit, and hence we should try to keep the program execution contained inside this function as much as possible. This will come up later, as in the current state of the VM it spends a sizeable chunk of its time outside `run()`. How this is possible and why it matters are questions that will be answered shortly. This is mentioned here to keep you reading.
 
-`image here`
+![Time spent outside the core loop](/assets/pb-1/perf-1.png)
 
 We're not done with this section yet. Beauty is only skin deep remember, and our pretty push and pop functions need to go. Calling a whole different C function for the simple act of pushing a value to the stack is so extra and bourgeois. We must not stand for this. A call frame for each push? Ridiculous. It's time for C macros.
 
