@@ -1,7 +1,7 @@
 ---
 layout: layouts/post.njk
-title: How I made my language as fast as Python
-description: A brief breakdown of all the techniques I've employed so far to make Pogberry ~moderately fast~
+title: How I made my language faster than Python
+description: A brief breakdown of all the techniques I've employed so far to make Pogberry ~blazingly fast~
 date: 2026-09-06
 author: Devansh
 tags: [posts, code]
@@ -348,7 +348,7 @@ Our program takes only about 15% of the time it used to take (the number appeari
 
 ## Streamlining OP_RETURN and OP_CALL
 
-I'd just stated that the fibonacci program was now as fast as python. That should have marked the end of that article right? After all Pogberry is now as fast as Python. Alas, I must keep you here a little longer, we haven't beaten Python across all the benchmarks on average, we still have two final little things to care of, and then we will be done.
+I'd just stated that the fibonacci program was now as fast as python. That should have marked the end of that article right? After all Pogberry is now as fast as Python. Alas, I must keep you here a little longer, we haven't beaten Python across all the benchmarks on average. Two quickfire optimizations for this round.
 
 First, lets talk about callable objects. Functions, native functions, classes and their bound methods - these are all the objects you can call in Pogberry. Unsurprisingly however, the vast majority of all the calls in a real program are to ObjClosure - functions, essentially. I would encourage making the project with `make opcodes` and running a few programs with the `--opcodes` flag. This would show you a count of all the opcodes that get called during the execution of that program. Of course, using the debug view which logs every single action taken by the VM, or using good ol' `perf` are also fine options. In this article I have mostly skipped over the reasoning behind choosing what I've so far chosen to optimize for the sake of brevity.
 
@@ -410,8 +410,37 @@ The extra conditional and variable lookup would not be worth it if a sizeable ch
 
 ![Benchmark at the end](/assets/pb-1/benchmark-final.png)
 
-Stop the count! We're still slower than Python in several areas, but I think it's fair to call Pogberry as fast as Python now. We're so much more efficient with our memory usage it's not even worth mentioning it. It's time to bring this article to a close.
+Stop the count! We're still slower than Python in several areas, but I think it's fair to call Pogberry as fast as Python now. We're so much more efficient with our memory usage it's not even worth mentioning it. However, this is no time to stop!
+
+## Computed goto
+This is the last optimization I will cover in detail. I'm getting tired of writing this blog, and I'm sure you're getting tired of reading. More pressingly, we are nearing the limit of our little bytecode VM. More details on the bottlenecks coming soon. First, let's give the humble `goto` some attention. 
+
+Our VM routes every instructuction through a central switch statement. At the machine level, that compiles to a shared indirect jump. Because every opcode return sto that single location to pick its next direction, the CPU's branch predictor is constantly scrambling trying to guess hundreds of different targets from one site. I've talked in detail why thi sis bad. Using GCC and Clang's label-as-value extension, we can replace the central siwtch with direct threading:
+
+```c
+#define DISPATCH() goto *dispatchTable[*ip++]
+```
+
+Instead of looping back to a central switch, each opcode handler ends with own dispatch jump. This distributes indirect jumps across separate physical code locations, allowing the CPU's Branch Target Buffer to correlate specific instruction transitions (eg OP_ADD followed by OP_SET_LOCAL).
+
+## The Optimization Plateau
+
+I did perform several other small optimizations apart from the ones mentioned, naturally many of them were failures as well. Not many are worth talking about, but I'll just mention in passing that making special opcodes for small integer literals (`OP_GET_LOCAL_0..3` AND `OP_SET_LOCAL_0..3`) provided an unexpected performance jump. 
+
+Anyway, this section is to talk about optimizations that failed to deliver, and why I stopped trying to chase further performance. There was a certain optimization I did which was supposed to make consecutive store and pop operations faster. When I did that, the profiler showed that over 40 million bytecode instructions were eliminated when calculating the 40th fibonacci number iteratively. Yet, the wall-clock time barely budged. The same fibonacci program only took about 2% less time to execute after the optimization, well within the margin of error as the CPU speed fluctuates a bit over time due to thermal load and other factors. 
+
+How could deleting 40 million instructions barely move the clock? At the assembly level, `OP_POP` is a single register decrement with zero data dependencies. Modern x86 CPUs with their fancy out-of-orde rexecution contain multiple execution ports and likely simply retired that substraction in parallel during store latency at virtually zero effective clock cycles. The real cost for us isn't a 1-cycle ALU operation, it is the indirect branch dispatch tax and the memory latency. Needlessly condensing multiple smaller opcodes into larger opcodes won't solve this fundamental reality.
+
+In another experiment, seeing the success of specializing slots 0 to 3, I tried adding specialized slots up to the number 7. The benchmarks showed a whooping 0% improvement. I expected this to be fair, and our slot 0 to 3 trick by itself is benchmaxxing. Adding even more tiny opcodes would simply serve to bloat the opcode dispatch table, consume extra L1 instruction line cache and add more branch targets for the CPU to predict. I didn't keep this optimization in.
+
+The fact is, our simple bytecode interpreter has hit its limit. I will show the benchmarks soon, but we're currently about 30% faster than Python. With a lot more determination and work, I could probably drag Pogberry to be 50% faster than Python, but the easy gains are over. There is nothing about pratt parsing or the way Mr. Robert Nystrom designed CLOX that's holding us back, any other similar implementation would also hit such a limit, perhaps a little higher and perhaps due to different underlying reasons. For us, the indirect branch dispatch tax and tagged value representation dominate runtime. We can't strip too many more clock cycles from Pogberry's execution without causing negative impact to the language itself. 
+
+I am proud of what Pogberry has achieved so far, but if we wish to get faster, we're gonna have to turn to a JIT. That remains an unplanned future dream. For now, I leave you with the final benchmarks, the fruit of our labour:
+
+![Benchmark at the end](/assets/pb-1/benchmark-final-v2.png)
+
+![Benchmark at the end](/assets/pb-1/benchmark-final-v3.png)
 
 ---
 
-Congratulations, you're among the top 1% of humans when it comes to attention span if you managed to read everything up till here. I'm thoroughly impressed. I have a reward for you - the journey isn't over! There's a lot more to do and you can look forward to another article coming soon (or maybe its already out). Pogberry can't just be as fast as Python, it's gotta be faster. I WILL make it blazingly fast. See you there!
+Congratulations, you're among the top 1% of humans when it comes to attention span if you managed to read everything up till here. I'm thoroughly impressed. Now you MUST contribute code to PB, ignore for 10 years of bad luck.
