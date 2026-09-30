@@ -29,6 +29,45 @@ module.exports = function (eleventyConfig) {
     return Math.max(1, Math.ceil(words / 200));
   });
 
+  eleventyConfig.addFilter("isoDate", function (dateObj) {
+    if (!dateObj) return "";
+    const d = new Date(dateObj);
+    return isNaN(d.getTime()) ? "" : d.toISOString();
+  });
+
+  eleventyConfig.addFilter("absoluteUrl", function (urlPath, base) {
+    if (!urlPath) return "";
+    if (/^https?:\/\//i.test(urlPath)) return urlPath;
+
+    const baseOrigin = (
+      base ||
+      process.env.SITE_URL ||
+      (process.env.VERCEL_PROJECT_PRODUCTION_URL &&
+        `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) ||
+      (process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`) ||
+      "https://the-myth-of-platypus.vercel.app"
+    ).trim();
+
+    try {
+      const parsedBase = new URL(
+        baseOrigin.startsWith("http") ? baseOrigin : "https://" + baseOrigin
+      );
+      const basePath = parsedBase.pathname.replace(/\/+$/, "");
+      const cleanPath = urlPath.startsWith("/") ? urlPath : "/" + urlPath;
+
+      if (
+        basePath &&
+        (cleanPath === basePath || cleanPath.startsWith(basePath + "/"))
+      ) {
+        return parsedBase.origin + cleanPath;
+      }
+
+      return parsedBase.origin + basePath + cleanPath;
+    } catch {
+      return urlPath;
+    }
+  });
+
   eleventyConfig.addCollection("posts", function (collectionApi) {
     return collectionApi
       .getFilteredByGlob("src/posts/*.md")
@@ -47,3 +86,4 @@ module.exports = function (eleventyConfig) {
     htmlTemplateEngine: "njk",
   };
 };
+

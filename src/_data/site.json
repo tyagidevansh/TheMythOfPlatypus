@@ -1,4 +1,7 @@
 {
   "title": "The Myth of Platypus",
-  "description": "A minimalist blog powered by Markdown and Eleventy."
+  "description": "Notes from the edge of curiosity.",
+  "url": "https://the-myth-of-platypus.vercel.app",
+  "defaultImage": "/assets/og-cover.png",
+  "author": "Devansh"
 }
