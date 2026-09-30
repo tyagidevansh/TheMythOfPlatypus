@@ -1,3 +1,6 @@
+const fs = require("fs");
+const path = require("path");
+
 module.exports = function (eleventyConfig) {
   eleventyConfig.addPassthroughCopy({ "src/assets": "assets" });
 
@@ -33,6 +36,58 @@ module.exports = function (eleventyConfig) {
     if (!dateObj) return "";
     const d = new Date(dateObj);
     return isNaN(d.getTime()) ? "" : d.toISOString();
+  });
+
+  eleventyConfig.addFilter("imageInfo", function (urlPath) {
+    if (!urlPath) return null;
+    const clean = urlPath.replace(/^\//, "");
+    let filePath = path.join(__dirname, "src", clean);
+    if (!fs.existsSync(filePath)) {
+      filePath = path.join(__dirname, clean);
+    }
+    if (!fs.existsSync(filePath)) return null;
+
+    const ext = path.extname(filePath).toLowerCase();
+    const mime =
+      ext === ".jpg" || ext === ".jpeg"
+        ? "image/jpeg"
+        : ext === ".png"
+        ? "image/png"
+        : ext === ".webp"
+        ? "image/webp"
+        : ext === ".svg"
+        ? "image/svg+xml"
+        : "image/jpeg";
+
+    try {
+      const buf = fs.readFileSync(filePath);
+      let width, height;
+
+      if (ext === ".png" && buf.length >= 24 && buf.toString("ascii", 12, 16) === "IHDR") {
+        width = buf.readUInt32BE(16);
+        height = buf.readUInt32BE(20);
+      } else if ((ext === ".jpg" || ext === ".jpeg") && buf.length > 8) {
+        let i = 2;
+        while (i < buf.length - 8) {
+          if (buf[i] !== 0xff) {
+            i++;
+            continue;
+          }
+          const marker = buf[i + 1];
+          if (marker === 0xc0 || marker === 0xc2) {
+            height = buf.readUInt16BE(i + 5);
+            width = buf.readUInt16BE(i + 7);
+            break;
+          }
+          const len = buf.readUInt16BE(i + 2);
+          i += 2 + len;
+        }
+      }
+
+      return { width, height, mime };
+    } catch {
+      return { mime };
+    }
   });
 
   eleventyConfig.addFilter("absoluteUrl", function (urlPath, base) {
@@ -86,4 +141,3 @@ module.exports = function (eleventyConfig) {
     htmlTemplateEngine: "njk",
   };
 };
-

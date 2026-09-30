@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="">
+<html lang="en" data-theme="" prefix="og: https://ogp.me/ns#">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,7 +10,7 @@
     {% endif %}
     <link rel="canonical" href="{{ page.url | absoluteUrl(site.url) }}" />
 
-    <!-- Open Graph / Social Media Preview -->
+    <!-- Open Graph (WhatsApp, Facebook, LinkedIn, Discord, Telegram) -->
     {% set isArticle = layout == 'layouts/post.njk' or (tags and 'posts' in tags) %}
     <meta property="og:site_name" content="{{ site.title }}" />
     <meta property="og:type" content="{{ 'article' if isArticle else 'website' }}" />
@@ -20,10 +20,23 @@
 
     {# Article header image is primary; og-cover.png is only the backup #}
     {% set previewImage = image if image else (site.defaultImage or '/assets/og-cover.png') %}
-    <meta property="og:image" content="{{ previewImage | absoluteUrl(site.url) }}" />
+    {% set fullImageUrl = previewImage | absoluteUrl(site.url) %}
+    {% set imgInfo = previewImage | imageInfo %}
+    <meta property="og:image" content="{{ fullImageUrl }}" />
+    <meta property="og:image:secure_url" content="{{ fullImageUrl }}" />
+    {% if imgInfo and imgInfo.mime %}
+    <meta property="og:image:type" content="{{ imgInfo.mime }}" />
+    {% endif %}
+    {% if imgInfo and imgInfo.width and imgInfo.height %}
+    <meta property="og:image:width" content="{{ imgInfo.width }}" />
+    <meta property="og:image:height" content="{{ imgInfo.height }}" />
+    {% endif %}
     {% if imageAlt or title %}
     <meta property="og:image:alt" content="{{ imageAlt or title }}" />
     {% endif %}
+    <link rel="image_src" href="{{ fullImageUrl }}" />
+    <meta itemprop="image" content="{{ fullImageUrl }}" />
+
     {% if isArticle %}
       {% if date %}
     <meta property="article:published_time" content="{{ date | isoDate }}" />
@@ -44,10 +57,11 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="{{ title or site.title }}" />
     <meta name="twitter:description" content="{{ description or site.description }}" />
-    <meta name="twitter:image" content="{{ previewImage | absoluteUrl(site.url) }}" />
+    <meta name="twitter:image" content="{{ fullImageUrl }}" />
     {% if imageAlt or title %}
     <meta name="twitter:image:alt" content="{{ imageAlt or title }}" />
     {% endif %}
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
